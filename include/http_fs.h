@@ -80,7 +80,7 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filena
 {
   for (uint8_t i = 0; i < countTypes - 1; i++)
     if (sizeof(http_content_type_ext[i]) == 1 ||
-        cntstr(&filename[strlen(filename) - strlen(http_content_type_ext[i])], http_content_type_ext[i]))
+        cmpstr(&filename[strlen(filename) - strlen(http_content_type_ext[i])], http_content_type_ext[i]))
       return httpd_resp_set_type(req, http_content_type[i]);
 
   return httpd_resp_set_type(req, "text/plain");
@@ -92,7 +92,7 @@ static char *get_path_from_uri(const char *url, bool addBasePath = false)
 {
   char *nurl = nullptr;
 
-  if (cntstr(url, "/"))
+  if (cmpstr(url, "/"))
     nurl = strdup("/index.html");
   else
   {
@@ -428,7 +428,7 @@ mv
 */
 static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *data)
 {
-  if (cntstr(command, "ls"))
+  if (cmpstr(command, "ls"))
   {
     cJSON *path = cJSON_GetObjectItem(data, "path");
     if (!cJSON_IsString(path) || (path->valuestring == NULL))
@@ -436,7 +436,7 @@ static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *da
     return command_ls(req, path->valuestring);
   }
 
-  if (cntstr(command, "mkdir"))
+  if (cmpstr(command, "mkdir"))
   {
     cJSON *path = cJSON_GetObjectItem(data, "path");
     if (!cJSON_IsString(path) || (path->valuestring == NULL))
@@ -444,7 +444,7 @@ static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *da
     return command_mkdir(req, path->valuestring);
   }
 
-  if (cntstr(command, "rm"))
+  if (cmpstr(command, "rm"))
   {
     cJSON *path = cJSON_GetObjectItem(data, "path");
     if (!cJSON_IsString(path) || (path->valuestring == NULL))
@@ -457,7 +457,7 @@ static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *da
     return command_rm(req, path->valuestring, rec);
   }
 
-  if (cntstr(command, "mv"))
+  if (cmpstr(command, "mv"))
   {
     cJSON *old = cJSON_GetObjectItem(data, "old");
     if (!cJSON_IsString(old) || (old->valuestring == NULL))
