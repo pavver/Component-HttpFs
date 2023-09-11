@@ -1,12 +1,12 @@
 #pragma once
 
+#include "Core.h"
 #include "cJSON.h"
 #include "esp_flash_partitions.h"
 #include "esp_http_server.h"
 #include "esp_vfs.h"
 #include "esp_vfs_fat.h"
 #include "ff.h"
-#include "Core.h"
 
 #define MAX_FILE_SIZE (1024 * 1024) // 1 MB
 #define MAX_FILE_SIZE_STR "1MB"
@@ -17,13 +17,12 @@ const static char *base_path = "/fat";
 
 static bool fsMounted = false;
 
-static void normaliz_all();
+static void fixAllFileNames();
 
 static esp_err_t fs_mount()
 {
   if (fsMounted)
     return ESP_OK;
-  //ESP_LOGI("MOUNT", "Mounting FAT filesystem");
   // To mount device we need name of device partition, define base_path
   // and allow format partition in case if it is new one and was not formatted before
   const esp_vfs_fat_mount_config_t mount_config = {
@@ -42,7 +41,7 @@ static esp_err_t fs_mount()
   }
 
   fsMounted = true;
-  normaliz_all();
+  // fixAllFileNames();
   return ESP_OK;
 }
 
@@ -75,7 +74,12 @@ const static char *http_content_type_ext[] = {
 
 const static uint8_t countTypes = 9;
 
-// Set HTTP response content type according to file extension
+/**
+ * @brief Set HTTP response content type according to file extension.
+ * @param req request context.
+ * @param filename supported name.html .jpeg .png .ico .js .css .json .woff2 (others text/plain)
+ * @return esp_err_t
+ */
 static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filename)
 {
   for (uint8_t i = 0; i < countTypes - 1; i++)
@@ -86,8 +90,12 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filena
   return httpd_resp_set_type(req, "text/plain");
 }
 
-// Copies the full path into destination buffer and returns
-// pointer to path (skipping the preceding base path)
+/**
+ * @brief converts a url to a path to a file in the FATFS.
+ * @param url
+ * @param addBasePath true if you want to add base_path to the file path.
+ * @return char* the full path to the file in the FATFS.
+ */
 static char *get_path_from_uri(const char *url, bool addBasePath = false)
 {
   char *nurl = nullptr;
@@ -134,9 +142,7 @@ static char *normalizeFileName(const char *dir, const char *filename)
       len = (strlen(ret) + strlen(filename) + 2);
       char *fpath2 = (char *)malloc(sizeof(char) * len);
       snprintf(fpath2, len, "%s/%s", dir, ret);
-      //FRESULT res = 
       f_rename(fpath1, fpath2);
-      //ESP_LOGI("RENAME", "FRESULT f_rename(\"%s\", \"%s\") == %i", fpath1, fpath2, res);
       free(fpath1);
       free(fpath2);
       break;
@@ -180,7 +186,15 @@ static FRESULT normaliz_path(char *path)
   return res;
 }
 
-static void normaliz_all()
+/**
+ * @brief if using the FatFs generator directly from the CMake build system by calling.
+ * maybe a mistake? if the file name is 18 characters, the file is written with an incorrect name,
+ * this function is intended to fix this error.
+ * Example file name:
+ * 351.baa8b638.js.gz recorded as 351.baa8b638.js.gz￿￿￿￿￿￿￿￿
+ * vendor.4b625066.js recorded as vendor.4b625066.js￿￿￿￿￿￿￿￿
+ */
+static void fixAllFileNames()
 {
   char buff[256];
 
@@ -199,45 +213,50 @@ static esp_err_t file_get(httpd_req_t *req, const char *url)
   FIL fdst; // File objects
   UINT br;  // File read count
 
-  char *filename = get_path_from_uri(url);
+  char *filePath = get_path_from_uri(url);
+  char *openFilePath = nullptr;
+  FRESULT fr;
 
-  char *filename_gzip = (char *)malloc(sizeof(char) * (strlen(filename) + 4));
-  sprintf(filename_gzip, "%s.gz", filename);
-  FRESULT fr = f_open(&fdst, filename_gzip, FA_READ);
+  // try opening the gzip file if it exists
+  const static char *patterm = "%s.gz";
+  int length = snprintf(nullptr, 0, patterm, filePath);
+  openFilePath = (char *)malloc(sizeof(char) * length);
+  snprintf(openFilePath, length, patterm, filePath);
+  fr = f_open(&fdst, openFilePath, FA_READ);
 
-  if (fr == FR_OK)
+  if (fr != FR_OK)
   {
-    httpd_resp_set_hdr(req, http_content_encoding_hdr, http_content_encoding_gzip);
+    // gziped file does not exist, try to open a regular file
+    free(openFilePath);
+    openFilePath = strdup(filePath);
+    fr = f_open(&fdst, openFilePath, FA_READ);
   }
   else
-  {
-    fr = f_open(&fdst, filename, FA_READ);
-  }
+    httpd_resp_set_hdr(req, http_content_encoding_hdr, http_content_encoding_gzip);
 
   if (fr == FR_NO_FILE)
   {
-    free(filename);
-    filename = strdup("/index.html");
-    fr = f_open(&fdst, filename, FA_READ);
+    free(openFilePath);
+    openFilePath = strdup("/index.html");
+    fr = f_open(&fdst, openFilePath, FA_READ);
   }
 
   httpd_resp_set_hdr(req, http_cache_control_hdr, http_cache_control_no_cache);
 
-  if (fr == FR_NO_FILE)
-  {
-    httpd_resp_send_404(req);
-    free(filename);
-    return ESP_FAIL;
-  }
   if (fr != FR_OK)
   {
-    httpd_resp_send_500(req);
-    free(filename);
+    if (fr == FR_NO_FILE)
+      httpd_resp_send_404(req);
+    else
+      httpd_resp_send_500(req);
+    free(filePath);
+    free(openFilePath);
     return ESP_FAIL;
   }
 
-  // Set conten type header
-  set_content_type_from_file(req, filename);
+  // Set header content type. filePath instead of openFilePath because openFilePath can have a .gz extension
+  set_content_type_from_file(req, filePath);
+  free(filePath);
 
   int buf_len = MIN(fdst.obj.objsize, 8192);
   char *buffer = (char *)malloc(buf_len); // File copy buffer
@@ -257,7 +276,7 @@ static esp_err_t file_get(httpd_req_t *req, const char *url)
   // Close open file
   fr = f_close(&fdst);
 
-  free(filename);
+  free(openFilePath);
   free(buffer);
   return ESP_OK;
 }
@@ -266,20 +285,24 @@ static esp_err_t command_upload_file(httpd_req_t *req)
 {
   if (req->content_len > MAX_FILE_SIZE)
   {
-    //ESP_LOGE("UPLOAD", "File too large : %d bytes", req->content_len);
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File size must be less than " MAX_FILE_SIZE_STR "!");
     return ESP_FAIL;
   }
 
-  FILE *fd = NULL;
-  int buf_len = MIN(req->content_len, 8192);
+  size_t filename_len = httpd_req_get_hdr_value_len(req, "File-Name");
+  if (filename_len <= 0)
+  {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "need File-Name header");
+    return ESP_FAIL;
+  }
 
-  char *filename = (char *)malloc(256);
-  httpd_req_get_hdr_value_str(req, "File-Name", filename, 256);
+  char *filename = (char *)malloc(filename_len + 1);
+  httpd_req_get_hdr_value_str(req, "File-Name", filename, filename_len + 1);
 
   char *path = get_path_from_uri(filename, true);
   free(filename);
 
+  FILE *fd = NULL;
   fd = fopen(path, "w");
   if (fd == NULL)
   {
@@ -289,6 +312,7 @@ static esp_err_t command_upload_file(httpd_req_t *req)
   }
 
   // Retrieve the pointer to scratch buffer for temporary storage
+  int buf_len = MIN(req->content_len, 8192);
   char *buf = (char *)malloc(buf_len);
   int received;
 
@@ -313,8 +337,6 @@ static esp_err_t command_upload_file(httpd_req_t *req)
       // close and delete the unfinished file
       fclose(fd);
       unlink(path);
-
-      ESP_LOGI("DEBUG", "%i", received);
 
       httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
       ret = ESP_FAIL;
@@ -344,7 +366,6 @@ static esp_err_t command_ls(httpd_req_t *req, const char *path)
 {
   FF_DIR dir;
   FRESULT res = f_opendir(&dir, path); /* Open the directory */
-  //ESP_LOGI("LS", "FRESULT f_opendir(\"%s\") == %i", path, res);
   if (res != FR_OK)
   {
     return ESP_FAIL;
@@ -373,7 +394,6 @@ static esp_err_t command_ls(httpd_req_t *req, const char *path)
       char *chunk = (char *)malloc(sizeof(char) * len);
       snprintf(chunk, len, mask, fno.fname, fno.fsize, fno.fdate, fno.ftime, fno.fattrib);
       httpd_resp_sendstr_chunk(req, chunk);
-      //ESP_LOGI("LS", "%s", chunk);
       free(chunk);
     }
   } while (res == FR_OK);
