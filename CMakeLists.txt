@@ -1,4 +1,5 @@
 idf_component_register(SRCS ""
                     INCLUDE_DIRS "include"
-                    PRIV_REQUIRES "vfs fatfs json Core"
+                    REQUIRES "bootloader_support spi_flash vfs fatfs"
+                    PRIV_REQUIRES "spi_flash fatfs json Core"
                     )
