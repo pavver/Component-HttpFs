@@ -36,12 +36,11 @@ static esp_err_t fs_mount()
 
   if (err != ESP_OK)
   {
-    ESP_LOGE("MOUNT", "Failed to mount FATFS (%s)", esp_err_to_name(err));
+    ESP_LOGE("FatFS", "Failed to mount FATFS (%s)", esp_err_to_name(err));
     return ESP_FAIL;
   }
 
   fsMounted = true;
-  // fixAllFileNames();
   return ESP_OK;
 }
 
@@ -281,7 +280,7 @@ static esp_err_t file_get(httpd_req_t *req, const char *url)
   return ESP_OK;
 }
 
-static esp_err_t command_upload_file(httpd_req_t *req)
+static esp_err_t post_upload_file(httpd_req_t *req)
 {
   if (req->content_len > MAX_FILE_SIZE)
   {

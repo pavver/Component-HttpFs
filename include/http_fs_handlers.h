@@ -7,14 +7,15 @@
 
 static esp_err_t http_server_get_handler(httpd_req_t *req)
 {
-  size_t buf_len;
-  esp_err_t ret = ESP_OK;
+ return file_get(req, req->uri);
+  //size_t buf_len;
+  //esp_err_t ret = ESP_OK;
 
-  ESP_LOGI("GET", "%s", req->uri);
+  //ESP_LOGI("GET", "%s", req->uri);
 
   // Get header value string length and allocate memory for length + 1,
   // extra byte for null termination
-  char *host = nullptr;
+  /* char *host = nullptr;
   buf_len = httpd_req_get_hdr_value_len(req, "Host") + 1;
   if (buf_len > 1)
   {
@@ -24,9 +25,8 @@ static esp_err_t http_server_get_handler(httpd_req_t *req)
       free(host);
       host = nullptr;
     }
-  }
+  } */
 
-  file_get(req, req->uri);
 
   /* determine if Host is from the STA IP address */
   // wifi_manager_lock_sta_ip_string(portMAX_DELAY);
@@ -44,12 +44,12 @@ static esp_err_t http_server_get_handler(httpd_req_t *req)
   } */
 
   // memory clean up
-  if (host != nullptr)
+  /* if (host != nullptr)
   {
     free(host);
-  }
+  } */
 
-  return ret;
+  //return ret;
 }
 
 /// @brief Команди роботи з файловою системою
@@ -89,7 +89,7 @@ static esp_err_t post_fs_handler(httpd_req_t *req)
 static const httpd_uri_t http_server_post_fs_upload_request = {
     .uri = "/fs/upload",
     .method = HTTP_POST,
-    .handler = command_upload_file};
+    .handler = post_upload_file};
 
 static const httpd_uri_t http_server_post_fs_request = {
     .uri = "/fs",
