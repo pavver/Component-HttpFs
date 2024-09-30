@@ -25,14 +25,11 @@ static esp_err_t fs_mount()
     return ESP_OK;
   // To mount device we need name of device partition, define base_path
   // and allow format partition in case if it is new one and was not formatted before
-  const esp_vfs_fat_mount_config_t mount_config = {
-      .format_if_mount_failed = true,
-      .max_files = 4,
-      .allocation_unit_size = CONFIG_WL_SECTOR_SIZE,
-      .disk_status_check_enable = false};
-  esp_err_t err;
+  esp_vfs_fat_mount_config_t mount_config = VFS_FAT_MOUNT_DEFAULT_CONFIG();
+  mount_config.format_if_mount_failed = true;
 
-  err = esp_vfs_fat_spiflash_mount_rw_wl(base_path, "storage", &mount_config, &s_wl_handle);
+  // esp_vfs_fat_spiflash_format_cfg_rw_wl
+  esp_err_t err = esp_vfs_fat_spiflash_mount_rw_wl(base_path, partitionName, &mount_config, &s_wl_handle);
 
   if (err != ESP_OK)
   {
