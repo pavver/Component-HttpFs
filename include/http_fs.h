@@ -281,6 +281,7 @@ static esp_err_t file_get(httpd_req_t *req, const char *url)
 
 static esp_err_t post_upload_file(httpd_req_t *req)
 {
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   if (req->content_len > MAX_FILE_SIZE)
   {
     httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File size must be less than " MAX_FILE_SIZE_STR "!");

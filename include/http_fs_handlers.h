@@ -55,6 +55,7 @@ static esp_err_t http_server_get_handler(httpd_req_t *req)
 /// @brief Команди роботи з файловою системою
 static esp_err_t post_fs_handler(httpd_req_t *req)
 {
+  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   if (req->content_len > 1024)
   {
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content_len > 1024");
