@@ -55,7 +55,8 @@ const static char *http_content_type[] = {
     "text/css",               // 5 css
     "application/json",       // 6 json
     "application/font-woff2", // 7 woff2
-    "text/plain"};            // 8 txt
+    "image/svg+xml",          // 8 svg
+    "text/plain"};            // 9 txt
 
 const static char *http_content_type_ext[] = {
     ".html",  // 0 html
@@ -66,9 +67,10 @@ const static char *http_content_type_ext[] = {
     ".css",   // 5 css
     ".json",  // 6 json
     ".woff2", // 7 woff2
-    ""};      // 8 txt
+    ".svg",   // 8 svg
+    ""};      // 9 txt
 
-const static uint8_t countTypes = 9;
+const static uint8_t countTypes = 10;
 
 /**
  * @brief Set HTTP response content type according to file extension.
