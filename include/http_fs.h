@@ -371,15 +371,23 @@ static esp_err_t command_ls(httpd_req_t *req, const char *path)
   }
 
   httpd_resp_sendstr_chunk(req, "[");
+  uint16_t indexer = 0;
   do
   {
     FILINFO fno;
     res = f_readdir(&dir, &fno); // Read a directory item
     if (res != FR_OK || fno.fname[0] == 0)
       break; // Break on error or end of dir
+
+    if (indexer > 0)
+    {
+      httpd_resp_sendstr_chunk(req, ",");
+    }
+    indexer++;
+
     if (fno.fattrib & AM_DIR)
     { // It is a directory
-      const static char *mask = "{\"type\":\"directory\",\"name\":\"%s\"},";
+      const static char *mask = "{\"type\":\"directory\",\"name\":\"%s\"}";
       int len = snprintf(NULL, 0, mask, fno.fname) + 1;
       char *chunk = (char *)malloc(sizeof(char) * len);
       snprintf(chunk, len, mask, fno.fname);
@@ -388,10 +396,10 @@ static esp_err_t command_ls(httpd_req_t *req, const char *path)
     }
     else
     { // It is a file.
-      const static char *mask = "{\"type\":\"file\",\"name\":\"%s\",\"size\":%lu,\"date\":%lu,\"time\":%lu,\"attrib\":%i},";
-      int len = snprintf(NULL, 0, mask, fno.fname, fno.fsize, fno.fdate, fno.ftime, fno.fattrib) + 1;
+      const static char *mask = "{\"type\":\"file\",\"name\":\"%s\",\"size\":%lu}";
+      int len = snprintf(NULL, 0, mask, fno.fname, fno.fsize) + 1;
       char *chunk = (char *)malloc(sizeof(char) * len);
-      snprintf(chunk, len, mask, fno.fname, fno.fsize, fno.fdate, fno.ftime, fno.fattrib);
+      snprintf(chunk, len, mask, fno.fname, fno.fsize);
       httpd_resp_sendstr_chunk(req, chunk);
       free(chunk);
     }
