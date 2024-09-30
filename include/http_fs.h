@@ -15,6 +15,8 @@ static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 
 const static char *base_path = "/fat";
 
+const static char *partitionName = "storage";
+
 static bool fsMounted = false;
 
 static void fixAllFileNames();
@@ -85,7 +87,7 @@ static esp_err_t set_content_type_from_file(httpd_req_t *req, const char *filena
         cmpstr(&filename[strlen(filename) - strlen(http_content_type_ext[i])], http_content_type_ext[i]))
       return httpd_resp_set_type(req, http_content_type[i]);
 
-  return httpd_resp_set_type(req, "text/plain");
+  return httpd_resp_set_type(req, http_content_type[countTypes - 1]);
 }
 
 /**
@@ -217,7 +219,7 @@ static esp_err_t file_get(httpd_req_t *req, const char *url)
 
   // try opening the gzip file if it exists
   const static char *patterm = "%s.gz";
-  int length = snprintf(nullptr, 0, patterm, filePath);
+  int length = snprintf(nullptr, 0, patterm, filePath) + 1;
   openFilePath = (char *)malloc(sizeof(char) * length);
   snprintf(openFilePath, length, patterm, filePath);
   fr = f_open(&fdst, openFilePath, FA_READ);
@@ -288,15 +290,15 @@ static esp_err_t post_upload_file(httpd_req_t *req)
     return ESP_FAIL;
   }
 
-  size_t filename_len = httpd_req_get_hdr_value_len(req, "File-Name");
+  size_t filename_len = httpd_req_get_hdr_value_len(req, "X-File-Name");
   if (filename_len <= 0)
   {
-    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "need File-Name header");
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "need X-File-Name header");
     return ESP_FAIL;
   }
 
   char *filename = (char *)malloc(filename_len + 1);
-  httpd_req_get_hdr_value_str(req, "File-Name", filename, filename_len + 1);
+  httpd_req_get_hdr_value_str(req, "X-File-Name", filename, filename_len + 1);
 
   char *path = get_path_from_uri(filename, true);
   free(filename);
@@ -413,29 +415,17 @@ static esp_err_t command_ls(httpd_req_t *req, const char *path)
 
 static esp_err_t command_mkdir(httpd_req_t *req, const char *path)
 {
-  FRESULT res = f_mkdir(path);
-  if (res > 0)
-    return ESP_OK;
-
-  return ESP_FAIL;
+  return f_mkdir(path);
 }
 
 static esp_err_t command_rm(httpd_req_t *req, const char *path, bool recursive)
 {
-  FRESULT res = f_unlink(path);
-  if (res > 0)
-    return ESP_OK;
-
-  return ESP_FAIL;
+  return f_unlink(path);
 }
 
 static esp_err_t command_mv(httpd_req_t *req, const char *old, const char *newc)
 {
-  FRESULT res = f_rename(old, newc);
-  if (res > 0)
-    return ESP_OK;
-
-  return ESP_FAIL;
+  return f_rename(old, newc);
 }
 
 // Список команд файлової системи
@@ -453,16 +443,9 @@ rm
 mv
 {"old":"/oldname", "new":"/newname"}
 */
-static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *data)
-{
-  if (cmpstr(command, "ls"))
-  {
-    cJSON *path = cJSON_GetObjectItem(data, "path");
-    if (!cJSON_IsString(path) || (path->valuestring == NULL))
-      return ESP_FAIL;
-    return command_ls(req, path->valuestring);
-  }
 
+static esp_err_t handle_codereturn_command(httpd_req_t *req, const char *command, cJSON *data)
+{
   if (cmpstr(command, "mkdir"))
   {
     cJSON *path = cJSON_GetObjectItem(data, "path");
@@ -478,7 +461,7 @@ static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *da
       return ESP_FAIL;
 
     bool rec = false;
-    cJSON *recursive = cJSON_GetObjectItem(data, "name");
+    cJSON *recursive = cJSON_GetObjectItem(data, "recursive");
     if (recursive != NULL)
       rec = cJSON_IsTrue(recursive) == 0;
     return command_rm(req, path->valuestring, rec);
@@ -496,6 +479,32 @@ static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *da
   }
 
   return ESP_FAIL;
+}
+
+static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *data)
+{
+  if (cmpstr(command, "ls"))
+  {
+    cJSON *path = cJSON_GetObjectItem(data, "path");
+    if (!cJSON_IsString(path) || (path->valuestring == NULL))
+      return ESP_FAIL;
+    return command_ls(req, path->valuestring);
+  }
+
+  esp_err_t err = handle_codereturn_command(req, command, data);
+  if (err == ESP_OK)
+  {
+    httpd_resp_sendstr(req, "OK");
+    return err;
+  }
+
+  int len = snprintf(NULL, 0, "%d", err) + 1;
+  char *chunk = (char *)malloc(sizeof(char) * len);
+  snprintf(chunk, len, "%d", err);
+  httpd_resp_sendstr(req, chunk);
+  free(chunk);
+
+  return err;
 }
 
 static esp_err_t http_handle_command(httpd_req_t *req, cJSON *json)
