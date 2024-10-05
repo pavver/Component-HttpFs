@@ -428,6 +428,57 @@ static esp_err_t command_mv(httpd_req_t *req, const char *old, const char *newc)
   return f_rename(old, newc);
 }
 
+static esp_err_t command_info(httpd_req_t *req)
+{
+  uint64_t total_bytes = 0, free_bytes = 0;
+
+  // Перевірка чи файлову систему змонтовано
+  if (s_wl_handle == WL_INVALID_HANDLE)
+  {
+    // Відправляємо статус помилки
+    httpd_resp_sendstr_chunk(req, "{\"status\":\"error\",\"message\":\"Файлова система не змонтована\"}");
+    return ESP_OK;
+  }
+
+  // Отримання інформації про файлову систему
+  esp_vfs_fat_info(base_path, &total_bytes, &free_bytes);
+
+  // Відправляємо статус "ok"
+  httpd_resp_sendstr_chunk(req, "{\"status\":\"ok\",");
+
+  // Динамічно генеруємо та відправляємо поле "total_bytes"
+  httpd_resp_sendstr_chunk(req, "\"total_bytes\":");
+  int len = snprintf(NULL, 0, "%" PRIu64, total_bytes) + 1;
+  char *total_bytes_buffer = (char *)malloc(len);
+  snprintf(total_bytes_buffer, len, "%" PRIu64, total_bytes);
+  httpd_resp_sendstr_chunk(req, total_bytes_buffer);
+  free(total_bytes_buffer);
+
+  // Відправляємо роздільник та поле "free_bytes"
+  httpd_resp_sendstr_chunk(req, ",\"free_bytes\":");
+  len = snprintf(NULL, 0, "%" PRIu64, free_bytes) + 1;
+  char *free_bytes_buffer = (char *)malloc(len);
+  snprintf(free_bytes_buffer, len, "%" PRIu64, free_bytes);
+  httpd_resp_sendstr_chunk(req, free_bytes_buffer);
+  free(free_bytes_buffer);
+
+  // Відправляємо роздільник та поле "used_bytes"
+  httpd_resp_sendstr_chunk(req, ",\"used_bytes\":");
+  len = snprintf(NULL, 0, "%" PRIu64, total_bytes - free_bytes) + 1;
+  char *used_bytes_buffer = (char *)malloc(len);
+  snprintf(used_bytes_buffer, len, "%" PRIu64, total_bytes - free_bytes);
+  httpd_resp_sendstr_chunk(req, used_bytes_buffer);
+  free(used_bytes_buffer);
+
+  // Закриваємо JSON-об'єкт
+  httpd_resp_sendstr_chunk(req, "}");
+
+  // Вказуємо завершення відправки
+  httpd_resp_sendstr_chunk(req, NULL);
+
+  return ESP_OK;
+}
+
 // Список команд файлової системи
 
 /*
@@ -489,6 +540,10 @@ static esp_err_t handle_command(httpd_req_t *req, const char *command, cJSON *da
     if (!cJSON_IsString(path) || (path->valuestring == NULL))
       return ESP_FAIL;
     return command_ls(req, path->valuestring);
+  }
+  if (cmpstr(command, "info"))
+  {
+    return command_info(req);
   }
 
   esp_err_t err = handle_codereturn_command(req, command, data);
