@@ -440,6 +440,8 @@ static esp_err_t command_info(httpd_req_t *req)
     return ESP_OK;
   }
 
+  const static char *mask = "%" PRIu64;
+
   // Отримання інформації про файлову систему
   esp_vfs_fat_info(base_path, &total_bytes, &free_bytes);
 
@@ -448,27 +450,19 @@ static esp_err_t command_info(httpd_req_t *req)
 
   // Динамічно генеруємо та відправляємо поле "total_bytes"
   httpd_resp_sendstr_chunk(req, "\"total_bytes\":");
-  int len = snprintf(NULL, 0, "%" PRIu64, total_bytes) + 1;
+  int len = snprintf(NULL, 0, mask, total_bytes) + 1;
   char *total_bytes_buffer = (char *)malloc(len);
-  snprintf(total_bytes_buffer, len, "%" PRIu64, total_bytes);
+  snprintf(total_bytes_buffer, len, mask, total_bytes);
   httpd_resp_sendstr_chunk(req, total_bytes_buffer);
   free(total_bytes_buffer);
 
   // Відправляємо роздільник та поле "free_bytes"
   httpd_resp_sendstr_chunk(req, ",\"free_bytes\":");
-  len = snprintf(NULL, 0, "%" PRIu64, free_bytes) + 1;
+  len = snprintf(NULL, 0, mask, free_bytes) + 1;
   char *free_bytes_buffer = (char *)malloc(len);
-  snprintf(free_bytes_buffer, len, "%" PRIu64, free_bytes);
+  snprintf(free_bytes_buffer, len, mask, free_bytes);
   httpd_resp_sendstr_chunk(req, free_bytes_buffer);
   free(free_bytes_buffer);
-
-  // Відправляємо роздільник та поле "used_bytes"
-  httpd_resp_sendstr_chunk(req, ",\"used_bytes\":");
-  len = snprintf(NULL, 0, "%" PRIu64, total_bytes - free_bytes) + 1;
-  char *used_bytes_buffer = (char *)malloc(len);
-  snprintf(used_bytes_buffer, len, "%" PRIu64, total_bytes - free_bytes);
-  httpd_resp_sendstr_chunk(req, used_bytes_buffer);
-  free(used_bytes_buffer);
 
   // Закриваємо JSON-об'єкт
   httpd_resp_sendstr_chunk(req, "}");
